@@ -1,13 +1,20 @@
+/* eslint-disable max-len */
 import {Request, Response} from "express";
-// The Cloud Functions for Firebase SDK to create Cloud Functions and triggers.
-
 import {onRequest} from "firebase-functions/v2/https";
-
-// The Firebase Admin SDK to access Firestore.
 import {initializeApp} from "firebase-admin/app";
 import {getFirestore, Timestamp} from "firebase-admin/firestore";
+import {SessionsClient, protos} from "@google-cloud/dialogflow-cx";
+
+const projectID = process.env.DIALOGFLOW_PROJECT_ID || ""; // Directly use your Project ID
+const agentID = process.env.DIALOGFLOW_AGENT_ID;
+const location = process.env.DIALOGFLOW_LOCATION || "global";
 
 initializeApp();
+
+const dialogflowClient = new SessionsClient({
+  projectID: projectID,
+  apiEndpoint: "asia-southeast1-dialogflow.googleapis.com",
+});
 
 // Take the text parameter passed to this HTTP endpoint and insert it into
 // Firestore under the path /messages/:documentId/original
@@ -36,17 +43,16 @@ exports.diagoniseCrop = onRequest(async (req: Request, res: Response) => {
     const resolvedImageUrl =
       imageUrl ?? `https://firebasestorage.googleapis.com/v0/b/${process.env.STORAGE_BUCKET}/o/${encodeURIComponent(imagePath)}?alt=media`;
     // API Call - mock for now-
-    const prediction = "rice_brownSpot";
+    const disease = "rice_brownSpot";
     const confidence = 0.91;
 
-    console.log("Getting diseases collection....");
     const snapshot = await getFirestore().collection("diseases").get();
     console.log("Number of documents:", snapshot.size);
     snapshot.forEach((doc) => console.log("Found doc ID:", doc.id));
 
     const adviceDoc = await getFirestore()
       .collection("diseases")
-      .doc(prediction)
+      .doc(disease)
       .get();
 
     console.log("Document Exists: ", adviceDoc.exists);
@@ -69,78 +75,118 @@ exports.diagoniseCrop = onRequest(async (req: Request, res: Response) => {
       .add({
         imageUrl: resolvedImageUrl,
         cropType,
-        prediction,
+        disease,
         confidence,
         advice,
         submittedAt: Timestamp.now(),
       });
-    res.json({prediction, confidence, advice});
+    await getFirestore()
+      .collection("users")
+      .doc(userId)
+      .collection("messages")
+      .add({
+        sender: "assistant",
+        content: `Hi! I’ve just diagnosed your crop.
+          It seems to be affected by ${disease}.
+          I’m here to help — ask me anything about the treatment or symptoms!`,
+        timestamp: Timestamp.now(),
+      });
+    res.json({disease, confidence, advice});
   } catch (err) {
     console.error("Error: ", err);
   }
 });
 
-exports.dialogflowWebhook = onRequest(async (req: Request, res: Response) => {
+export const dialogflowWebhook = onRequest(async (req: Request, res: Response) => {
   try {
-    const intentName = req.body.queryResult.intent.displayName;
+    const tag = req.body.fulfillmentInfo?.tag;
+    const sessionParams = req.body.sessionInfo?.parameters || {};
+    const crop = sessionParams.crop;
+    const disease = sessionParams.disease;
 
-    if (intentName === "AfterDiagnosis-Help") {
-      res.json({
-        fulfillmentText: "Here’s the advice for treating your crop disease...",
-      });
+    let responseText = "Hmm, I’m not sure how to help with that.";
+
+    if (tag === "treatment") {
+      const doc = await getFirestore().collection("treatments").doc(disease).get();
+      responseText = doc.exists ? doc.data()?.text : "Sorry, no treatment found.";
+    } else if (tag === "symptoms") {
+      const doc = await getFirestore().collection("symptoms").doc(disease).get();
+      responseText = doc.exists ? doc.data()?.text : "Sorry, no symptoms found.";
+    } else if (tag === "general_tips") {
+      const doc = await getFirestore().collection("generalTips").doc(crop).get();
+      responseText = doc.exists ? doc.data()?.text : "Sorry, no tips available.";
     }
-
-    if (intentName === "SymptomsExplanation") {
-      const disease = req.body.queryResult.parameters.disease;
-      const doc =
-        await getFirestore().collection("diseases").doc(disease).get();
-
-      if (doc.exists) {
-        const symptoms = doc.data()?.symptoms || "No symptoms data found.";
-        res.json({
-          fulfillmentText: `Symptoms of ${disease}: ${symptoms}`,
-        });
-      }
-      res.json({
-        fulfillmentText: `Sorry, I couldn’t find information on ${disease}.`,
-      });
-    }
-
-    if (intentName === "TreatmentDetails") {
-      const prediction = req.body.queryResult.parameters.disease;
-      const doc =
-        await getFirestore().collection("diseases").doc(prediction).get();
-
-      if (doc.exists) {
-        const adviceDoc = await getFirestore()
-          .collection("diseases")
-          .doc(prediction)
-          .get();
-
-
-        let advice = "No advice found."; // Default value
-
-        if (adviceDoc.exists) {
-          const data = adviceDoc.data();
-
-          advice = data?.treatment || "Treatment information not available.";
-        }
-        res.json({
-          fulfillmentText: `Treatment for ${prediction}: ${advice}`,
-        });
-      }
-      res.json({
-        fulfillmentText:
-          `Sorry, I couldn’t find treatment advice for ${prediction}.`,
-      });
-    }
-
     res.json({
-      fulfillmentText: "Sorry, I didn’t recognize that intent.",
+      fulfillment_response: {
+        messages: [
+          {
+            text: {
+              text: [responseText],
+            },
+          },
+        ],
+      },
     });
-  } catch (err) {
-    console.error("Error: ", err);
+  } catch (error) {
+    console.error("Error handling the webhook: ", error);
+    res.status(500).send("Internal Server Error");
   }
 });
 
 
+export const initializeDialogflowSession = onRequest(async (req: Request, res: Response) => {
+  try {
+    const {sessionId, crop, disease} = req.body;
+
+    if (!sessionId || !crop || !disease) {
+      res.status(400).send("Missing required fields: sessionId, crop, or disease");
+      return;
+    }
+
+    if (!agentID || !location) {
+      console.error("Missing required environment variables for Dialogflow (agent ID or location).");
+      res.status(500).send("Internal server error: Dialogflow configuration missing.");
+      return;
+    }
+
+    // Proper session path construction
+    const sessionPath = dialogflowClient.projectLocationAgentSessionPath(
+      projectID,
+      location,
+      agentID,
+      sessionId
+    );
+
+    const parameters = {
+      fields: {
+        crop: {stringValue: crop},
+        disease: {stringValue: disease},
+      },
+    };
+
+    const request: protos.google.cloud.dialogflow.cx.v3beta1.IDetectIntentRequest = {
+      session: sessionPath,
+      queryInput: {
+        text: {
+          text: "hi",
+        },
+        languageCode: "en",
+      },
+      queryParams: {
+        parameters: parameters,
+      },
+    };
+
+    const responses = await dialogflowClient.detectIntent(request);
+    const [response] = responses;
+
+    console.log("Detected intent:", response);
+    res.status(200).json({
+      message: "Dialogflow session initialized successfully",
+      data: response,
+    });
+  } catch (error) {
+    console.error("Error initializing Dialogflow session: ", error);
+    res.status(500).send(`Internal server error: ${error}`);
+  }
+});
