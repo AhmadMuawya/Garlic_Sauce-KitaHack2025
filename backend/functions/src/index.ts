@@ -5,7 +5,7 @@ import {initializeApp} from "firebase-admin/app";
 import {getFirestore, Timestamp} from "firebase-admin/firestore";
 import {SessionsClient, protos} from "@google-cloud/dialogflow-cx";
 
-const projectID = process.env.DIALOGFLOW_PROJECT_ID || ""; // Directly use your Project ID
+const projectID = process.env.DIALOGFLOW_PROJECT_ID || "";
 const agentID = process.env.DIALOGFLOW_AGENT_ID;
 const location = process.env.DIALOGFLOW_LOCATION || "global";
 
@@ -18,7 +18,7 @@ const dialogflowClient = new SessionsClient({
 
 // Take the text parameter passed to this HTTP endpoint and insert it into
 // Firestore under the path /messages/:documentId/original
-exports.addmessage = onRequest(async (req: Request, res: Response) => {
+export const addmessage = onRequest(async (req: Request, res: Response) => {
   // Grab the text parameter.
   const original = req.query.text;
   // Push the new message into Firestore using the Firebase Admin SDK.
@@ -32,7 +32,7 @@ exports.addmessage = onRequest(async (req: Request, res: Response) => {
 // Test Function, sends a message to the user when
 // he make a request to this endpoint
 exports.sendMessage = onRequest(async (req: Request, res: Response) => {
-  const message = "Hello Ahmad";
+  const message = "Hello Ahmaaaad";
 
   res.json({message: message});
 });
@@ -42,7 +42,8 @@ exports.diagoniseCrop = onRequest(async (req: Request, res: Response) => {
     const {imageUrl, imagePath, cropType, userId} = req.body;
     const resolvedImageUrl =
       imageUrl ?? `https://firebasestorage.googleapis.com/v0/b/${process.env.STORAGE_BUCKET}/o/${encodeURIComponent(imagePath)}?alt=media`;
-    // API Call - mock for now-
+
+    // ML Model API Call - mock for now-
     const disease = "rice_brownSpot";
     const confidence = 0.91;
 
@@ -97,7 +98,7 @@ exports.diagoniseCrop = onRequest(async (req: Request, res: Response) => {
   }
 });
 
-export const dialogflowWebhook = onRequest(async (req: Request, res: Response) => {
+exports.dialogflowWebhook = onRequest(async (req: Request, res: Response) => {
   try {
     const tag = req.body.fulfillmentInfo?.tag;
     const sessionParams = req.body.sessionInfo?.parameters || {};
@@ -134,7 +135,7 @@ export const dialogflowWebhook = onRequest(async (req: Request, res: Response) =
 });
 
 
-export const initializeDialogflowSession = onRequest(async (req: Request, res: Response) => {
+exports.initializeDialogflowSession = onRequest(async (req: Request, res: Response) => {
   try {
     const {sessionId, crop, disease} = req.body;
 
