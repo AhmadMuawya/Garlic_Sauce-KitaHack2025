@@ -18,6 +18,22 @@
         "npm --prefix \"$RESOURCE_DIR\" run lint",
         "npm --prefix \"$RESOURCE_DIR\" run build"
       ]
+    },
+    {
+      "source": "functions_python",
+      "codebase": "python-ml",
+      "runtime": "python310",
+      "ignore": [
+        "venv",
+        ".git",
+        ".gitignore",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ],
+      "options": {
+        "timeoutSeconds": 540,
+        "memory": "512MiB"
+      }
     }
   ]
 }

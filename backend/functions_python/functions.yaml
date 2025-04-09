@@ -1,0 +1,9 @@
+# functions-python/functions.yaml
+specVersion: v1alpha1
+endpoints:
+  predict_disease:
+    platform: gcfv2
+    # runtime: python310 # REMOVED THIS LINE
+    entryPoint: predict_disease
+    httpsTrigger: {}
+requiredAPIs: []

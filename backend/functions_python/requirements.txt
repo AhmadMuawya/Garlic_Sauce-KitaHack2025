@@ -1,0 +1,21 @@
+# Cloud Functions Framework (includes Flask)
+# https://cloud.google.com/functions/docs/concepts/python-runtime
+functions-framework==3.*
+
+# Firebase Admin SDK (if you need other Firebase services in Python, otherwise optional)
+firebase-admin>=6.0.0
+
+# TensorFlow (adjust version if needed, consider lighter CPU version if GPU not used)
+tensorflow==2.15.0 # Or a specific version your model requires
+
+# Pillow for image processing
+Pillow==9.5.0
+
+# Requests for fetching from HTTP URLs
+requests>=2.20.0
+
+# Google Cloud Storage client (if fetching from GCS)
+google-cloud-storage>=2.0.0
+
+# NumPy (often a dependency of TensorFlow, but good to list)
+numpy==1.23.5
