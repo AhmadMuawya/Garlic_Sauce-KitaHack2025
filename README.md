@@ -1,4 +1,4 @@
-# [Product_Name] - AI-Powered Crop Diagnosis Assistant
+# LEAFLYZER - AI-Powered Crop Diagnosis Assistant
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) <!-- Optional -->
 
@@ -23,7 +23,7 @@
 
 ## Project Description
 
-`[Product_Name]` is a cross-platform mobile application (iOS & Android) built with Flutter. It acts as an AI assistant for farmers and gardeners, helping them diagnose potential crop diseases or issues by analyzing images uploaded or captured through the app. The system uses Firebase for backend infrastructure (Storage, Functions) and a TensorFlow model for image analysis. Its purpose is to provide accessible and rapid diagnostic support for better plant health management.
+`LEAFLYZER` is a cross-platform mobile application (iOS & Android) built with Flutter. It acts as an AI assistant for farmers and gardeners, helping them diagnose potential crop diseases or issues by analyzing images uploaded or captured through the app. The system uses Firebase for backend infrastructure (Storage, Functions) and a TensorFlow model for image analysis. Its purpose is to provide accessible and rapid diagnostic support for better plant health management.
 
 This project utilizes AI for image recognition and aligns with **UN Sustainable Development Goal 2 (Zero Hunger)** by aiming to reduce crop losses through timely diagnosis.
 
@@ -33,7 +33,7 @@ Farmers and gardeners often struggle to quickly and accurately identify plant di
 
 ## Solution
 
-`[Product_Name]` addresses these challenges by providing an easy-to-use mobile application that:
+`LEAFLYZER` addresses these challenges by providing an easy-to-use mobile application that:
 
 *   Allows users to select their crop type and provide an image of the plant concern.
 *   Securely uploads the image to Firebase Storage.
@@ -68,9 +68,7 @@ Farmers and gardeners often struggle to quickly and accurately identify plant di
 
 ## Demo Video
 
-[Link to Your Unlisted or Public YouTube Demo Video Here] (Max 5 minutes)
-
-*The video showcases the core user flow, highlights key features, and explains the integration of Google technologies like Flutter, Firebase Storage, Firebase Functions, and TensorFlow.*
+[[Link to YouTube Demo Video Here]](https://youtu.be/9tw_mJEHJFs?feature=shared)
 
 ## Project Structure
 
@@ -97,7 +95,6 @@ This repository may contain multiple components. The primary structure is:
 └── README.md # This file
 
 
-*(Adjust the structure description if your repository layout is different, e.g., if everything is in the root)*
 
 ## Setup and Installation
 
@@ -114,8 +111,8 @@ This repository may contain multiple components. The primary structure is:
 
 1.  **Clone Repository:**
     ```bash
-    git clone [Your Repository URL]
-    cd [Your Repository Name]/frontend # Or root if flutter code is there
+    git clone https://github.com/AhmadMuawya/Garlic_Sauce-KitaHack2025.git
+    cd Garlic_Sauce-KitaHack2025/frontend 
     ```
 2.  **Configure Firebase:**
     *   Ensure you have the correct `firebase_options.dart` file in `lib/`. If not, run `flutterfire configure` and select your Firebase project.
@@ -134,7 +131,7 @@ This repository may contain multiple components. The primary structure is:
 
 1.  **Navigate to Functions Directory:**
     ```bash
-    cd ../functions # Or the correct path to your functions code
+    cd ../functions 
     ```
 2.  **Install Dependencies:**
     ```bash
@@ -142,7 +139,7 @@ This repository may contain multiple components. The primary structure is:
     ```
 3.  **Set up Firebase Project Link (if needed):**
     ```bash
-    firebase use [your-firebase-project-id]
+    firebase use 
     ```
 4.  **Deploy Functions:**
     ```bash
@@ -158,7 +155,7 @@ This repository may contain multiple components. The primary structure is:
 
 ## Usage
 
-1.  Launch the `[Product_Name]` app on your device/emulator.
+1.  Launch the `LEAFLYZER` app on your device/emulator.
 2.  Select the type of crop you want to analyze from the list.
 3.  On the next screen, either capture a new photo of the plant using the camera icon or upload an existing photo using the gallery icon.
 4.  Press the proceed button.
@@ -171,7 +168,7 @@ This repository may contain multiple components. The primary structure is:
 *   **Integration:** Ensuring smooth data flow between Flutter app -> Firebase Storage -> Firebase Functions -> TensorFlow Model -> Back to App.
 *   **Real-time Performance:** Optimizing image upload and function execution time for a responsive user experience.
 *   **Firebase Rules:** Configuring appropriate security rules for Firebase Storage (and Firestore, if used) to allow user uploads while preventing unauthorized access.
-*   **(If applicable):** Cold starts in Firebase Functions impacting initial response time.
+
 
 ## Future Work
 
