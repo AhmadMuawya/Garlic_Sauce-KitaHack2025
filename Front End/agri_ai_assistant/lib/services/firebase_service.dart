@@ -12,12 +12,14 @@ class FirebaseService {
 
   // --- _uploadImage function (Stays the same, uses Firebase Storage SDK) ---
   Future<
-      ({
-        bool isSuccess,
-        String? imageUrl,
-        String? errorMessage,
-        String? storagePath
-      })> _uploadImage(String cropId, File imageFile) async {
+    ({
+      bool isSuccess,
+      String? imageUrl,
+      String? errorMessage,
+      String? storagePath,
+    })
+  >
+  _uploadImage(String cropId, File imageFile) async {
     final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
     final String fileExtension = imageFile.path.split('.').last;
     final String fileName = '$timestamp.$fileExtension';
@@ -31,7 +33,7 @@ class FirebaseService {
         contentType: 'image/jpeg', // Adjust as needed
         customMetadata: <String, String>{
           'cropId': cropId,
-          'uploadedAt': timestamp
+          'uploadedAt': timestamp,
         },
       );
       final UploadTask uploadTask = storageRef.putFile(imageFile, metadata);
@@ -43,16 +45,17 @@ class FirebaseService {
         isSuccess: true,
         imageUrl: downloadUrl,
         errorMessage: null,
-        storagePath: storagePath
+        storagePath: storagePath,
       );
     } on FirebaseException catch (e) {
       print(
-          "FirebaseService: Upload failed - Code: ${e.code}, Message: ${e.message}");
+        "FirebaseService: Upload failed - Code: ${e.code}, Message: ${e.message}",
+      );
       return (
         isSuccess: false,
         imageUrl: null,
         errorMessage: 'Storage Error: ${e.message ?? e.code}',
-        storagePath: null
+        storagePath: null,
       );
     } catch (e) {
       print("FirebaseService: Upload failed - Unexpected: $e");
@@ -60,34 +63,30 @@ class FirebaseService {
         isSuccess: false,
         imageUrl: null,
         errorMessage: 'Unexpected upload error: $e',
-        storagePath: null
+        storagePath: null,
       );
     }
   }
 
   // --- MODIFIED: Calls the 'diagoniseCrop' onRequest Function using HTTP --- http: ^1.1.0
   Future<AnalysisResult> _fetchAnalysisViaHttp(
-      String cropType, String? imageUrl, String? imagePath) async {
-    // --- Use the EXACT Cloud Run URL provided ---
+    String cropType,
+    String? imageUrl,
+    String? imagePath,
+  ) async {
     final Uri functionUri = Uri.parse(
-        "https://diagonisecrop-f6hm6f2zoq-uc.a.run.app"); // <-- USE THIS URL
-
-    print("FirebaseService: Calling Cloud Run URL: $functionUri");
-    print(
-        "FirebaseService: Payload - cropType: $cropType, imageUrl: $imageUrl, imagePath: $imagePath");
-
+      "https://diagonisecrop-f6hm6f2zoq-uc.a.run.app",
+    ); // Your Diagnosis Endpoint
+    print("FirebaseService: Calling HTTP Function URL: $functionUri");
+    // ... (Payload setup, headers - same as before) ...
     final Map<String, String> headers = {
       'Content-Type': 'application/json; charset=UTF-8',
-      // If your Cloud Run service requires authentication (e.g., IAM Invoker role, ID token):
-      // You might need to fetch an ID token and add it as a Bearer token here.
-      // 'Authorization': 'Bearer YOUR_ID_TOKEN',
     };
-
     final Map<String, dynamic> body = {
       'cropType': cropType,
       'imageUrl': imageUrl,
       'imagePath': imagePath,
-      // 'userId': 'some_flutter_user_id' // Add if needed
+      'userId': 'test_user01', // Pass if needed
     };
 
     try {
@@ -96,41 +95,148 @@ class FirebaseService {
         headers: headers,
         body: jsonEncode(body),
       );
-
       print("FirebaseService: Cloud Run Status Code: ${response.statusCode}");
       print("FirebaseService: Cloud Run Response Body: ${response.body}");
 
       if (response.statusCode == 200) {
         try {
           final Map<String, dynamic> data = jsonDecode(response.body);
+          // --- PARSE diagnosisId ---
+          // **IMPORTANT**: Adjust 'diagnosisId' key if your function returns it differently
+          final String? diagnosisId =
+              data['diagnosisId'] as String?; // Example parsing
+
           return AnalysisResult.success(
-            prediction: data['prediction'] as String?,
+            prediction: data['disease'] as String?,
             confidence: (data['confidence'] as num?)?.toDouble(),
             advise: data['advice'] as String?,
             imageUrl: imageUrl,
+            diagnosisId: diagnosisId, // <-- Store the parsed ID
           );
         } catch (e) {
-          print("FirebaseService: Failed to parse Cloud Run response: $e");
+          /* ... JSON parsing error handling ... */
+          print("FirebaseService: Failed to parse function response: $e");
           return AnalysisResult.error(
-              "Failed to parse analysis response: ${response.body}");
+            "Failed to parse analysis response: ${response.body}",
+          );
         }
       } else {
-        // Handle non-200 (e.g., 404 if URL path wrong, 403 Forbidden, 500 Internal Server Error)
+        /* ... HTTP error handling ... */
         return AnalysisResult.error(
-            "Analysis request failed (Status ${response.statusCode}): ${response.body}");
+          "Analysis request failed (Status ${response.statusCode}): ${response.body}",
+        );
       }
-    } on SocketException catch (e) {
-      print("FirebaseService: Network error calling Cloud Run: $e");
-      return AnalysisResult.error(
-          "Network Error: Could not connect to analysis service.");
-    } on http.ClientException catch (e) {
-      print("FirebaseService: HTTP Client error calling Cloud Run: $e");
-      return AnalysisResult.error(
-          "Connection Error: Failed to call analysis service.");
     } catch (e) {
-      print("FirebaseService: Unexpected error calling Cloud Run: $e");
-      return AnalysisResult.error(
-          "An unexpected error occurred during analysis: $e");
+      /* ... Network/Other error handling ... */
+      if (e is SocketException) {
+        print("FirebaseService: Network error calling Cloud Run: $e");
+        return AnalysisResult.error(
+          "Network Error: Could not connect to analysis service.",
+        );
+      } else if (e is http.ClientException) {
+        print("FirebaseService: HTTP Client error calling Cloud Run: $e");
+        return AnalysisResult.error(
+          "Connection Error: Failed to call analysis service.",
+        );
+      } else {
+        print("FirebaseService: Unexpected error calling Cloud Run: $e");
+        return AnalysisResult.error(
+          "An unexpected error occurred during analysis: $e",
+        );
+      }
+    }
+  }
+
+  // --- NEW: handleChatMessage Method ---
+  Future<({bool isSuccess, String? errorMessage, String? aiReply})>
+  handleChatMessage({
+    // Added aiReply to return type
+    required String userId,
+    required String diagnosisId,
+    required String userMessage,
+  }) async {
+    final Uri functionUri = Uri.parse(
+      "https://handlechatmessage-f6hm6f2zoq-uc.a.run.app",
+    ); // Chat Endpoint
+    print("FirebaseService: Calling Handle Chat URL: $functionUri");
+
+    final Map<String, String> headers = {
+      'Content-Type': 'application/json; charset=UTF-8',
+    };
+    final Map<String, dynamic> body = {
+      "userId": userId,
+      "diagnosisId": diagnosisId,
+      "userMessage": userMessage,
+    };
+
+    try {
+      final http.Response response = await http.post(
+        functionUri,
+        headers: headers,
+        body: jsonEncode(body),
+      );
+      print("FirebaseService: Handle Chat Status Code: ${response.statusCode}");
+      print("FirebaseService: Handle Chat Response Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        try {
+          // --- PARSE THE AI REPLY ---
+          final Map<String, dynamic> data = jsonDecode(response.body);
+          final String? reply = data['reply'] as String?;
+          if (reply != null) {
+            return (
+              isSuccess: true,
+              errorMessage: null,
+              aiReply: reply,
+            ); // Return success with reply
+          } else {
+            // Success status but no reply field found in JSON
+            return (
+              isSuccess: true,
+              errorMessage: null,
+              aiReply: null,
+            ); // Or handle as error?
+          }
+        } catch (e) {
+          // JSON parsing error on success response
+          print("FirebaseService: Failed to parse handleChat response: $e");
+          return (
+            isSuccess: false,
+            errorMessage: "Failed to parse reply: ${response.body}",
+            aiReply: null,
+          );
+        }
+      } else {
+        // Handle error status codes from chat handler function
+        return (
+          isSuccess: false,
+          errorMessage:
+              "Failed to send message (Status ${response.statusCode}): ${response.body}",
+          aiReply: null,
+        );
+      }
+    } catch (e) {
+      // Handle Network/Other errors
+      if (e is SocketException) {
+        return (
+          isSuccess: false,
+          errorMessage: "Network Error: Could not send message.",
+          aiReply: null,
+        );
+      }
+      if (e is http.ClientException) {
+        return (
+          isSuccess: false,
+          errorMessage: "Connection Error: Failed to send message.",
+          aiReply: null,
+        );
+      }
+      print("FirebaseService: Unexpected error calling handle chat: $e");
+      return (
+        isSuccess: false,
+        errorMessage: "An unexpected error occurred while sending message.",
+        aiReply: null,
+      );
     }
   }
 
@@ -147,17 +253,23 @@ class FirebaseService {
       final uploadResult = await _uploadImage(cropId, imageFile);
       if (!uploadResult.isSuccess) {
         return AnalysisResult.error(
-            "Image upload failed: ${uploadResult.errorMessage ?? 'Unknown reason'}");
+          "Image upload failed: ${uploadResult.errorMessage ?? 'Unknown reason'}",
+        );
       }
       imageUrl = uploadResult.imageUrl;
       storagePathForFunction = uploadResult.storagePath;
       print(
-          "FirebaseService: Image uploaded successfully, proceeding to analysis.");
+        "FirebaseService: Image uploaded successfully, proceeding to analysis.",
+      );
     } else {
       print(
-          "FirebaseService: No image file provided, proceeding to analysis without image.");
+        "FirebaseService: No image file provided, proceeding to analysis without image.",
+      );
     }
     return await _fetchAnalysisViaHttp(
-        cropId, imageUrl, storagePathForFunction);
+      cropId,
+      imageUrl,
+      storagePathForFunction,
+    );
   }
 }

@@ -1,11 +1,18 @@
-// lib/screens/chat_screen.dart
+// chat_screen.dart
 
-import 'dart:io'; // For File type
-import 'package:agri_ai_assistant/constants/app_constants.dart'; // Make sure 'crops' is defined here or accessible
-import 'package:agri_ai_assistant/models/analysis_result_model.dart'; // Your result model
-import 'package:agri_ai_assistant/models/crop_model.dart'; // For getting crop name
-import 'package:agri_ai_assistant/providers/app_provider.dart'; // To get cropId/imageFile
-import 'package:agri_ai_assistant/services/firebase_service.dart'; // Your Firebase service
+import 'dart:io';
+import 'package:agri_ai_assistant/constants/app_constants.dart';
+import 'package:agri_ai_assistant/models/analysis_result_model.dart';
+import 'package:agri_ai_assistant/models/chat_message_model.dart';
+import 'package:agri_ai_assistant/models/crop_model.dart';
+import 'package:agri_ai_assistant/providers/app_provider.dart';
+import 'package:agri_ai_assistant/services/firebase_service.dart';
+import 'package:agri_ai_assistant/widgets/chat/ai_message_bubble.dart';
+import 'package:agri_ai_assistant/widgets/chat/image_message_bubble.dart';
+import 'package:agri_ai_assistant/widgets/chat/loading_indicator.dart';
+import 'package:agri_ai_assistant/widgets/chat/error_display.dart';
+import 'package:agri_ai_assistant/widgets/chat/message_input_area.dart';
+import 'package:agri_ai_assistant/widgets/chat/user_message_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,43 +24,43 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  // Instantiate the Firebase service
   final FirebaseService _firebaseService = FirebaseService();
-
-  // State variables
-  bool _isLoading = true; // Start loading initially
-  AnalysisResult? _initialAnalysisResult; // Store the first result
-  String? _errorMessage; // Store any error message
-  String _loadingMessage = "Initializing..."; // More specific loading status
-
-  // --- Lifecycle and Data Fetching ---
+  bool _isLoading = true;
+  AnalysisResult? _initialAnalysisResult;
+  String? _errorMessage;
+  String _loadingMessage = "Initializing...";
+  // --- NEW STATE VARIABLES ---
+  final List<ChatMessage> _messages = []; // List to hold all messages
+  final TextEditingController _textController =
+      TextEditingController(); // For user input
+  final ScrollController _scrollController =
+      ScrollController(); // To scroll list
+  bool _isSending = false; // To disable send button during processing
+  String? _diagnosisId; // To store the ID from initial analysis
+  final String _demoUserId = "test_user01"; // Demo User ID from guide
 
   @override
   void initState() {
     super.initState();
-    // Fetch the analysis as soon as the screen loads
     _fetchInitialAnalysis();
   }
 
-  // Function to call the service and update state
   Future<void> _fetchInitialAnalysis() async {
-    // Ensure the widget is still mounted before updating state
     if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
       _initialAnalysisResult = null;
-      _loadingMessage = "Preparing analysis..."; // Initial status
+      _messages.clear(); // Clear previous messages
+      _diagnosisId = null;
+      _loadingMessage = "Preparing analysis...";
     });
 
     try {
-      // Get required data from provider
       final appProvider = Provider.of<AppProvider>(context, listen: false);
       final String? cropId = appProvider.selectedCropId;
-      final File? imageFile =
-          appProvider.imagePath; // Recommended rename: imageFile
+      final File? imageFile = appProvider.imagePath;
 
-      // Update loading message based on whether an image needs uploading
       if (imageFile != null) {
         if (mounted) setState(() => _loadingMessage = "Uploading image...");
       } else {
@@ -62,26 +69,102 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
 
-      // --- Call the main service method ---
-      // This handles internal upload (if needed) and then the function call
       final result = await _firebaseService.getAnalysis(cropId, imageFile);
 
-      if (!mounted) return; // Check mount status again after async operations
+      if (!mounted) return;
 
+      List<ChatMessage> initialMessages =
+          []; // Temporary list for initial items
+      if (result.isSuccess) {
+        _initialAnalysisResult = result;
+        _diagnosisId = result.diagnosisId;
+
+        // --- POPULATE INITIAL MESSAGES ---
+        if (imageFile != null) {
+          initialMessages.add(
+            ChatMessage(
+              id: 'initial_image_${DateTime.now().millisecondsSinceEpoch}',
+              text: '',
+              sender: SenderType.user,
+              timestamp: DateTime.now(),
+              imageFile: imageFile,
+            ),
+          );
+        }
+        if (result.prediction != null) {
+          initialMessages.add(
+            ChatMessage(
+              id: 'ai_pred_${DateTime.now().millisecondsSinceEpoch}',
+              text: result.prediction!,
+              sender: SenderType.ai,
+              timestamp: DateTime.now(),
+            ),
+          );
+        }
+        if (result.confidence != null) {
+          initialMessages.add(
+            ChatMessage(
+              id: 'ai_conf_${DateTime.now().millisecondsSinceEpoch}',
+              text:
+                  "Confidence: ${(result.confidence! * 100).toStringAsFixed(1)}%",
+              sender: SenderType.ai,
+              timestamp: DateTime.now(),
+            ),
+          );
+        }
+        if (result.advise != null && result.advise!.isNotEmpty) {
+          initialMessages.add(
+            ChatMessage(
+              id: 'ai_advise_${DateTime.now().millisecondsSinceEpoch}',
+              text: result.advise!,
+              sender: SenderType.ai,
+              timestamp: DateTime.now(),
+            ),
+          );
+        }
+        final selectedCropName =
+            crops
+                .firstWhere(
+                  (c) => c.id == cropId,
+                  orElse:
+                      () => const Crop(
+                        id: '',
+                        name: 'plant',
+                        imagePath: '',
+                        description: '',
+                      ),
+                )
+                .name;
+        initialMessages.add(
+          ChatMessage(
+            id: 'ai_followup_${DateTime.now().millisecondsSinceEpoch}',
+            text: "How else can I help you with your $selectedCropName?",
+            sender: SenderType.ai,
+            timestamp: DateTime.now(),
+          ),
+        );
+        // --- END POPULATE ---
+        print(
+          "Analysis successful: prediction=${_initialAnalysisResult?.prediction}, diagnosisId=$_diagnosisId",
+        );
+      } else {
+        _errorMessage = result.errorMessage ?? "An unknown error occurred.";
+        print("Analysis failed: $_errorMessage");
+      }
+
+      // Update state with initial messages or error
       setState(() {
         _isLoading = false;
-        if (result.isSuccess) {
-          _initialAnalysisResult = result;
-          // In a real chat, add these messages to a list here
-          print("Analysis successful: ${_initialAnalysisResult?.prediction}");
-        } else {
-          _errorMessage = result.errorMessage ??
-              "An unknown error occurred during analysis.";
-          print("Analysis failed: $_errorMessage");
-        }
+        _messages.addAll(
+          initialMessages,
+        ); // Add initial messages to the main list
       });
+
+      // Scroll after messages are likely rendered
+      if (initialMessages.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      }
     } catch (e) {
-      // Catch errors *outside* the service call (less likely but possible)
       if (!mounted) return;
       print("Error during initial analysis fetch in ChatScreen: $e");
       setState(() {
@@ -91,26 +174,23 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // --- Build Method ---
-
   @override
   Widget build(BuildContext context) {
-    // Access provider data for AppBar title and initial image
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     final selectedCropId = appProvider.selectedCropId;
-    final File? initialImageFile = appProvider.imagePath; // Get initial image
-
-    // Get crop name for AppBar title
-    // Ensure `crops` list is accessible (e.g., imported from constants)
-    final selectedCropName = crops
-        .firstWhere((crop) => crop.id == selectedCropId,
-            orElse: () => const Crop(
-                  id: 'default',
-                  name: 'Unknown Crop', // Better fallback
-                  imagePath: '',
-                  description: '',
-                ))
-        .name;
+    final selectedCropName =
+        crops
+            .firstWhere(
+              (crop) => crop.id == selectedCropId,
+              orElse:
+                  () => const Crop(
+                    id: 'default',
+                    name: 'Unknown Crop',
+                    imagePath: '',
+                    description: '',
+                  ),
+            )
+            .name;
 
     return Scaffold(
       appBar: AppBar(
@@ -118,261 +198,189 @@ class _ChatScreenState extends State<ChatScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // Navigate back. Clear selection if desired.
-            Provider.of<AppProvider>(context, listen: false).clearSelection();
+            appProvider.clearSelection();
             Navigator.of(context).pop();
           },
         ),
       ),
-      // Main layout: Chat area + Input area
       body: Column(
         children: [
-          // Chat messages area (takes available space)
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              // Pass necessary data to the chat area builder
-              child: _buildChatArea(selectedCropName, initialImageFile),
+              child: _buildChatAreaContent(),
             ),
           ),
-          // Message input area (placeholder for now)
-          _buildMessageInputArea(),
+          ChatInputArea(
+            controller: _textController, // From _ChatScreenState
+            isSending: _isSending, // From _ChatScreenState
+            onSendPressed: _handleSendMessage, // From _ChatScreenState
+          ),
         ],
       ),
     );
   }
 
-  // --- UI Helper Methods ---
+  Widget _buildChatAreaContent() {
+    // final appProvider = Provider.of<AppProvider>(context);
+    // final userMessages = appProvider.userMessages;
+    // final assistantMessages = appProvider.assistantMessages;
+    // final imageFile = appProvider.imagePath;
 
-  // Builds the main content area based on loading/error/success state
-  Widget _buildChatArea(String selectedCropName, File? initialImage) {
     if (_isLoading) {
-      // --- Loading State ---
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(_loadingMessage), // Display current loading status
-          ],
-        ),
-      );
+      return LoadingIndicator(message: _loadingMessage);
     } else if (_errorMessage != null) {
-      // --- Error State ---
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 50),
-              const SizedBox(height: 16),
-              Text(
-                "Analysis Failed:",
-                style: Theme.of(context).textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _errorMessage!, // Display the specific error
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.red[700]),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-                onPressed: _fetchInitialAnalysis, // Allow retry
-              )
-            ],
-          ),
-        ),
-      );
-    } else if (_initialAnalysisResult != null &&
-        _initialAnalysisResult!.isSuccess) {
-      // --- Success State: Display initial analysis as AI messages ---
-      // Use a ListView to prepare for adding more messages later
-      return ListView(
-        padding: const EdgeInsets.symmetric(vertical: 10.0),
-        // In a real chat, this list would contain message objects (user/AI)
-        children: [
-          // Display initial image if it exists
-          if (initialImage != null) _buildImageMessageBubble(initialImage),
-
-          // Display prediction if available
-          if (_initialAnalysisResult!.prediction != null)
-            _buildAiMessageBubble(_initialAnalysisResult!.prediction!),
-
-          // Display confidence if available
-          if (_initialAnalysisResult!.confidence != null)
-            _buildAiMessageBubble(
-                "Confidence: ${(_initialAnalysisResult!.confidence! * 100).toStringAsFixed(1)}%"),
-
-          // Display advice if available
-          if (_initialAnalysisResult!.advise != null &&
-              _initialAnalysisResult!.advise!.isNotEmpty)
-            _buildAiMessageBubble(_initialAnalysisResult!.advise!),
-
-          // Optional confirmation message
-          _buildAiMessageBubble(
-              "How else can I help you with your $selectedCropName?"),
-        ],
+      return ErrorDisplay(
+        errorMessage: _errorMessage!,
+        onRetry: _fetchInitialAnalysis,
       );
     } else {
-      // --- Fallback State (e.g., service returned success:false but no error message) ---
-      return const Center(
-        child: Text("Could not retrieve analysis details."),
+      // --- RENDER MESSAGES FROM LIST ---
+      return ListView.builder(
+        controller: _scrollController, // Attach scroll controller
+        padding: const EdgeInsets.symmetric(vertical: 10.0),
+        itemCount: _messages.length,
+        itemBuilder: (context, index) {
+          final message = _messages[index];
+          // Decide which bubble type to use
+          if (message.imageFile != null) {
+            return ImageMessageBubble(imageFile: message.imageFile!);
+          } else if (message.sender == SenderType.user) {
+            return UserMessageBubble(text: message.text); // Use the User bubble
+          } else {
+            // AI or System text messages
+            return AiMessageBubble(text: message.text);
+          }
+        },
       );
     }
   }
 
-  // Helper to build the initial image bubble
-  Widget _buildImageMessageBubble(File imageFile) {
-    return Align(
-      alignment: Alignment
-          .centerRight, // Align image to the right (like user sending it)
-      child: Container(
-        padding: const EdgeInsets.all(4.0), // Small padding around image
-        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.6, // Limit width
-          maxHeight: 200, // Limit height
-        ),
-        decoration: BoxDecoration(
-            color: Theme.of(context).primaryColorLight, // Use a theme color
-            borderRadius: BorderRadius.circular(15.0).copyWith(
-              bottomRight: const Radius.circular(2), // User style corner
-            ),
-            boxShadow: [
-              BoxShadow(
-                offset: const Offset(0, 1),
-                blurRadius: 1.0,
-                color: Colors.black12,
-              )
-            ]),
-        child: ClipRRect(
-          // Clip the image to rounded corners
-          borderRadius:
-              BorderRadius.circular(11.0), // Inner radius slightly smaller
-          child: Image.file(
-            // Using Image.file constructor
-            imageFile,
-            fit: BoxFit.cover, // Cover the area
-
-            // --- REMOVED loadingBuilder ---
-            // loadingBuilder is not a direct parameter of Image.file
-
-            // errorBuilder IS a direct parameter of Image.file
-            errorBuilder: (context, error, stackTrace) {
-              print("Error loading image file: $error"); // Log the error
-              return const Center(
-                  child: Icon(Icons.broken_image, color: Colors.grey));
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Helper to build a styled AI message bubble
-  Widget _buildAiMessageBubble(String text) {
-    return Align(
-      alignment: Alignment.centerLeft, // AI messages on the left
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 14.0),
-        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-        decoration: BoxDecoration(
-          color: Colors.grey[200], // AI message background
-          borderRadius: BorderRadius.circular(15.0).copyWith(
-            bottomLeft: const Radius.circular(2), // Slight style variation
-          ),
-          boxShadow: [
-            BoxShadow(
-              offset: const Offset(0, 1),
-              blurRadius: 1.0,
-              color: Colors.black12,
-            )
-          ],
-        ),
-        child: Text(
-          text,
-          style:
-              const TextStyle(color: Colors.black87), // AI message text style
-        ),
-      ),
-    );
-  }
-
-  // Helper to build a styled User message bubble
-  // (Not actively used yet, but defined for future use)
-  // ignore: unused_element
-  Widget _buildUserMessageBubble(String text) {
-    return Align(
-      alignment: Alignment.centerRight, // User messages on the right
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 14.0),
-        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-        decoration: BoxDecoration(
-          color: Theme.of(context)
-              .primaryColor, // User message background (theme color)
-          borderRadius: BorderRadius.circular(15.0).copyWith(
-            bottomRight: const Radius.circular(2), // Different corner style
-          ),
-          boxShadow: [
-            BoxShadow(
-              offset: const Offset(0, 1),
-              blurRadius: 1.0,
-              color: Colors.black12,
-            )
-          ],
-        ),
-        child: Text(
-          text,
-          style:
-              const TextStyle(color: Colors.white), // User message text color
-        ),
-      ),
-    );
-  }
-
-  // Placeholder for the message input field and send button
-  Widget _buildMessageInputArea() {
-    // This will be replaced with a functional input later
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor, // Use theme card color
-        boxShadow: const [
-          BoxShadow(
-            offset: Offset(0, -1), // Shadow above input
-            blurRadius: 2.0,
-            color: Colors.black12,
-          )
-        ],
-      ),
-      child: Row(
-        children: [
-          // Input Field (disabled for now)
-          const Expanded(
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: "Type your message...",
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-              ),
-              enabled: false, // Will be enabled later
+  // --- NEW METHOD TO HANDLE SENDING ---
+  Future<void> _handleSendMessage() async {
+    final String messageText = _textController.text.trim();
+    if (messageText.isEmpty || _diagnosisId == null) {
+      if (_diagnosisId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Error: Cannot send message. Initial analysis ID missing.',
             ),
           ),
-          // Send Button (disabled for now)
-          IconButton(
-            icon: Icon(Icons.send,
-                color: Theme.of(context).disabledColor), // Use disabled color
-            onPressed: null, // Will be implemented later
-          ),
-        ],
-      ),
+        );
+      }
+      return;
+    }
+
+    final String currentDiagnosisId = _diagnosisId!;
+    final String currentUser = _demoUserId;
+
+    // 1. Create User message object
+    final userMessage = ChatMessage(
+      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+      text: messageText,
+      sender: SenderType.user,
+      timestamp: DateTime.now(),
     );
+
+    // 2. Optimistic UI update for User message + Disable input
+    setState(() {
+      _isSending = true;
+      _messages.add(userMessage); // Add user message
+      _textController.clear();
+    });
+    _scrollToBottom(); // Scroll after adding user message
+
+    try {
+      // 3. Call the service
+      final result = await _firebaseService.handleChatMessage(
+        userId: currentUser,
+        diagnosisId: currentDiagnosisId,
+        userMessage: messageText,
+      );
+
+      if (!mounted) return;
+
+      // 4. Handle the result - Add AI reply if successful
+      if (result.isSuccess && result.aiReply != null) {
+        final aiReplyMessage = ChatMessage(
+          id: 'ai_${DateTime.now().millisecondsSinceEpoch}',
+          text: result.aiReply!, // Use the received reply
+          sender: SenderType.ai,
+          timestamp: DateTime.now(),
+        );
+        setState(() {
+          _messages.add(aiReplyMessage); // Add AI reply to the list
+        });
+        _scrollToBottom(); // Scroll after adding AI message
+        print("AI Reply received and added to UI.");
+      } else if (!result.isSuccess) {
+        // Show error if sending failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error: ${result.errorMessage ?? "Couldn't send message."}',
+            ),
+          ),
+        );
+        // Optional: Maybe remove the optimistic user message or mark as failed
+        // setState(() { _messages.remove(userMessage); });
+      }
+    } catch (e) {
+      // Catch errors from the service call itself
+      if (!mounted) return;
+      print("Error calling handleChatMessage service: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('An error occurred while sending the message.'),
+        ),
+      );
+      // Optional: Remove optimistic message on general error
+      // setState(() { _messages.remove(userMessage); });
+    } finally {
+      // 5. Re-enable input
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
+  }
+
+  // --- NEW METHOD TO SCROLL LIST ---
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers to prevent memory leaks
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 }
-// This is a placeholder for the message input area. It will be replaced with a functional input field and send button later.
+
+//unused
+
+// List<Widget> _buildMessages(
+//   List<String> userMessages,
+//   List<String> assistantMessages,
+// ) {
+//   final messageWidgets = <Widget>[];
+
+//   for (int i = 0; i < userMessages.length; i++) {
+//     messageWidgets.add(AiMessageBubble(text: userMessages[i]));
+//     if (i < assistantMessages.length) {
+//       messageWidgets.add(AiMessageBubble(text: assistantMessages[i]));
+//     }
+//   }
+
+//   return messageWidgets;
+// }

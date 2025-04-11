@@ -7,6 +7,7 @@ class AnalysisResult {
   final String? advise; // Actionable tips or advice
   final String? errorMessage; // Error message if isSuccess is false
   final String? imageUrl; // Optional: Include URL if generated/needed
+  final String? diagnosisId;
 
   const AnalysisResult({
     required this.isSuccess,
@@ -15,14 +16,12 @@ class AnalysisResult {
     this.advise,
     this.errorMessage,
     this.imageUrl, // Added imageUrl
+    this.diagnosisId,
   });
 
   // Factory constructor for error
   factory AnalysisResult.error(String message) {
-    return AnalysisResult(
-      isSuccess: false,
-      errorMessage: message,
-    );
+    return AnalysisResult(isSuccess: false, errorMessage: message);
   }
 
   // Factory constructor for success
@@ -32,6 +31,7 @@ class AnalysisResult {
     double? confidence,
     String? advise,
     String? imageUrl,
+    String? diagnosisId,
   }) {
     return AnalysisResult(
       isSuccess: true,
@@ -39,6 +39,7 @@ class AnalysisResult {
       confidence: confidence,
       advise: advise,
       imageUrl: imageUrl,
+      diagnosisId: diagnosisId,
       errorMessage: null,
     );
   }

@@ -35,8 +35,11 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => AppProvider(),
       child: MaterialApp(
-        title: 'Agri AI Assistant',
+        title: 'Leaflyzer',
         theme: ThemeData(
+          scaffoldBackgroundColor: const Color(
+            0xFFECFDEB,
+          ), // <-- Set background here
           primarySwatch: Colors.green,
           visualDensity: VisualDensity.adaptivePlatformDensity,
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.green.shade800),

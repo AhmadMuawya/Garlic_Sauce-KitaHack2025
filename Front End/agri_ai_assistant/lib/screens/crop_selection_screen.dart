@@ -39,8 +39,10 @@ class CropSelectionScreen extends StatelessWidget {
                 print('selected crop: ${crop.name}');
 
                 //update the selected crop in the provider
-                Provider.of<AppProvider>(context, listen: false)
-                    .setSelectedCropId(crop.id);
+                Provider.of<AppProvider>(
+                  context,
+                  listen: false,
+                ).setSelectedCropId(crop.id);
 
                 //navigate to the next screen (image capture screen)
                 Navigator.of(context).push(

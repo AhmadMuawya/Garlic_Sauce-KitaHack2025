@@ -20,9 +20,7 @@ class _SplashScreenState extends State<SplashScreen> {
     Timer(const Duration(seconds: 5), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const CropSelectionScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const CropSelectionScreen()),
         );
       }
     });
@@ -42,7 +40,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             SizedBox(height: 20),
             Text(
-              'Agri AI Assistant',
+              'Leaflyzer',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -51,9 +49,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             SizedBox(height: 40),
             CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Colors.green,
-              ),
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
             ),
           ],
         ),
